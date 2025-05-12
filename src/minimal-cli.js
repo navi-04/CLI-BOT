@@ -38,7 +38,7 @@ if (!fs.existsSync(modelsDir)) {
 
 // Simple command handler
 const commands = {
-  help: () => {
+  help: function() {
     console.log(`
 ${colors.bright}CLI-BOT - Minimal Version${colors.reset}
 
@@ -53,12 +53,12 @@ Available Commands:
     `);
   },
   
-  greet: (args) => {
+  greet: function(args) {
     const name = args[0] || 'User';
     logger.success(`Hello, ${name}! Welcome to the minimal CLI-BOT.`);
   },
   
-  'create-data': () => {
+  'create-data': function() {
     // Create a simple CSV file
     const csvContent = 'name,age,score\nAlice,25,95\nBob,30,85\nCharlie,22,90\nDiana,28,88\n';
     fs.writeFileSync(path.join(dataDir, 'sample.csv'), csvContent);
@@ -75,7 +75,7 @@ Available Commands:
     logger.success('Sample data files created in the data directory');
   },
   
-  'list-data': () => {
+  'list-data': function() {
     try {
       const files = fs.readdirSync(dataDir);
       if (files.length === 0) {
@@ -93,7 +93,29 @@ Available Commands:
     }
   },
   
-  'sentiment': (args) => {
+  'create-folder': function(args) {
+    if (!args[0]) {
+      logger.error('Please provide a folder name');
+      return;
+    }
+    
+    const folderName = args[0];
+    const parentDir = args[1] || dataDir;  // Default to data directory if not specified
+    const newFolderPath = path.join(parentDir, folderName);
+    
+    try {
+      if (fs.existsSync(newFolderPath)) {
+        logger.warning(`Folder "${folderName}" already exists in ${parentDir}`);
+      } else {
+        fs.mkdirSync(newFolderPath, { recursive: true });
+        logger.success(`Created folder: ${newFolderPath}`);
+      }
+    } catch (error) {
+      logger.error(`Failed to create folder: ${error.message}`);
+    }
+  },
+  
+  'sentiment': function(args) {
     if (!args[0]) {
       logger.error('Please provide text for sentiment analysis');
       return;
@@ -123,30 +145,8 @@ Available Commands:
       logger.info('Sentiment: Neutral');
     }
   },
-  args) => {
-  'version': () => {
-    const pkg = require('../package.json');
-    logger.info(`CLI-BOT version: ${pkg.version}`);   return;
-  }  }
-};    
-
-// Process command line argumentsr;  // Default to data directory if not specified
-const [,, cmd, ...args] = process.argv;    const newFolderPath = path.join(parentDir, folderName);
-
-// Execute the command or show help
-if (!cmd || cmd === 'help') {sSync(newFolderPath)) {
-  commands.help();der "${folderName}" already exists in ${parentDir}`);
-} else if (commands[cmd]) {
-  commands[cmd](args);fs.mkdirSync(newFolderPath, { recursive: true });
-} else {newFolderPath}`);
-  logger.error(`Unknown command: ${cmd}`);
-  logger.info('Use "help" to see available commands');   } catch (error) {
-}      logger.error(`Failed to create folder: ${error.message}`);
-
-    }
-  },
   
-  'version': () => {
+  'version': function() {
     const pkg = require('../package.json');
     logger.info(`CLI-BOT version: ${pkg.version}`);
   }
