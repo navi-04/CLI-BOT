@@ -1,0 +1,18 @@
+[
+  {
+    "text": "I love this product",
+    "sentiment": "positive"
+  },
+  {
+    "text": "This is great",
+    "sentiment": "positive"
+  },
+  {
+    "text": "Not very good",
+    "sentiment": "negative"
+  },
+  {
+    "text": "Terrible experience",
+    "sentiment": "negative"
+  }
+]

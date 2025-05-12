@@ -1,4 +1,3 @@
-const tf = require('@tensorflow/tfjs-node');
 const brain = require('brain.js');
 const fs = require('fs-extra');
 const path = require('path');
@@ -15,10 +14,7 @@ class MLManager {
     // Tokenizer for text processing
     this.tokenizer = new natural.WordTokenizer();
     
-    // TF Classifier
-    this.classifier = null;
-    
-    // Brain.js network
+    // Brain.js network - using this instead of TensorFlow to avoid native dependencies
     this.network = null;
   }
   
@@ -52,18 +48,22 @@ class MLManager {
     logger.success(`Model saved as ${name}`);
   }
   
-  async loadModel(name, type = 'tf') {
+  async loadModel(name, type = 'brain') {
     try {
-      if (type === 'brain') {
-        const modelPath = path.join(this.modelsDir, `${name}.json`);
-        const modelData = JSON.parse(fs.readFileSync(modelPath, 'utf8'));
+      const modelPath = path.join(this.modelsDir, `${name}.json`);
+      if (!fs.existsSync(modelPath)) {
+        logger.error(`Model file not found: ${modelPath}`);
+        return null;
+      }
+      
+      const modelData = JSON.parse(fs.readFileSync(modelPath, 'utf8'));
+      
+      if (type === 'bayes') {
+        return natural.BayesClassifier.restore(modelData);
+      } else {
         this.network = new brain.NeuralNetwork();
         this.network.fromJSON(modelData);
         return this.network;
-      } else {
-        const modelPath = `file://${path.join(this.modelsDir, name)}`;
-        this.classifier = await tf.loadLayersModel(modelPath);
-        return this.classifier;
       }
     } catch (err) {
       logger.error(`Failed to load model: ${err.message}`);
@@ -71,56 +71,68 @@ class MLManager {
     }
   }
   
-  createSimpleModel() {
-    const model = tf.sequential();
-    model.add(tf.layers.dense({ units: 100, activation: 'relu', inputShape: [10] }));
-    model.add(tf.layers.dense({ units: 50, activation: 'relu' }));
-    model.add(tf.layers.dense({ units: 2, activation: 'softmax' }));
-    
-    model.compile({
-      optimizer: 'adam',
-      loss: 'categoricalCrossentropy',
-      metrics: ['accuracy']
+  createSimpleModel(inputSize = 10, hiddenSize = 20, outputSize = 2) {
+    const network = new brain.NeuralNetwork({
+      hiddenLayers: [hiddenSize],
+      activation: 'sigmoid'
     });
     
-    return model;
+    return network;
   }
   
   preprocessData(data, features, target) {
     // Simple preprocessing for numerical data
-    const X = data.map(item => features.map(f => parseFloat(item[f])));
-    const y = data.map(item => parseInt(item[target]));
+    const processedData = [];
     
-    return {
-      X: tf.tensor2d(X),
-      y: tf.oneHot(tf.tensor1d(y, 'int32'), 2)
-    };
+    data.forEach(item => {
+      const input = {};
+      features.forEach(f => {
+        input[f] = parseFloat(item[f]) / 100; // Simple normalization
+      });
+      
+      const output = {};
+      output[item[target]] = 1;
+      
+      processedData.push({
+        input,
+        output
+      });
+    });
+    
+    return processedData;
   }
   
   async trainSimpleModel(data, features, target, epochs = 50) {
-    const { X, y } = this.preprocessData(data, features, target);
-    const model = this.createSimpleModel();
+    const processedData = this.preprocessData(data, features, target);
+    const network = this.createSimpleModel(features.length);
     
-    await model.fit(X, y, {
-      epochs,
-      callbacks: {
-        onEpochEnd: (epoch, logs) => {
-          logger.info(`Epoch ${epoch + 1}: loss = ${logs.loss.toFixed(4)}, accuracy = ${logs.acc.toFixed(4)}`);
-        }
-      }
+    logger.info(`Training model with ${processedData.length} examples...`);
+    
+    const result = await network.trainAsync(processedData, {
+      iterations: epochs,
+      errorThresh: 0.005,
+      log: true,
+      logPeriod: 10,
+      learningRate: 0.3
     });
     
-    return model;
+    logger.info(`Training completed in ${result.iterations} iterations with error: ${result.error}`);
+    return network;
   }
   
-  async predict(model, input, type = 'tf') {
-    if (type === 'brain') {
-      return model.run(input);
+  async predict(model, input) {
+    // Convert input array to object for brain.js
+    const inputObj = {};
+    if (Array.isArray(input)) {
+      input.forEach((val, i) => {
+        inputObj[`input${i}`] = val / 100; // Simple normalization
+      });
     } else {
-      const tensor = tf.tensor2d([input]);
-      const prediction = await model.predict(tensor);
-      return Array.from(prediction.dataSync());
+      Object.assign(inputObj, input);
     }
+    
+    const result = model.run(inputObj);
+    return result;
   }
   
   // Text classification with Natural.js
@@ -137,48 +149,72 @@ class MLManager {
     return classifier;
   }
   
-  // K-means clustering with TensorFlow.js
-  async performClustering(data, numClusters = 3, iterations = 20) {
-    const points = tf.tensor2d(data);
+  // K-means clustering simplified implementation
+  performClustering(data, numClusters = 3, iterations = 20) {
+    // Simple k-means implementation in pure JS
+    // Initialize centroids randomly
+    const centroids = [];
+    const dimensions = data[0].length;
     
-    // Randomly initialize centroids
-    const centroids = tf.randomUniform([numClusters, data[0].length]);
-    
-    for (let i = 0; i < iterations; i++) {
-      // Assignment step: assign each point to nearest centroid
-      const expandedPoints = points.expandDims(1);
-      const expandedCentroids = centroids.expandDims(0);
-      
-      // Calculate squared distance
-      const distances = tf.sum(tf.square(tf.sub(expandedPoints, expandedCentroids)), 2);
-      const assignments = tf.argMin(distances, 1);
-      
-      // Update step: move centroids to average of assigned points
-      const newCentroids = [];
-      
-      for (let j = 0; j < numClusters; j++) {
-        const mask = tf.equal(assignments, tf.scalar(j, 'int32'));
-        const maskFloat = tf.cast(mask, 'float32');
-        const sum = tf.sum(tf.mul(points, maskFloat.expandDims(1)), 0);
-        const count = tf.sum(maskFloat);
-        const centroid = tf.div(sum, count);
-        newCentroids.push(centroid);
-      }
-      
-      const newCentroidsTensor = tf.stack(newCentroids);
-      centroids.assign(newCentroidsTensor);
+    for (let i = 0; i < numClusters; i++) {
+      centroids.push(Array.from({ length: dimensions }, () => Math.random()));
     }
     
-    // Assign final clusters
-    const expandedPoints = points.expandDims(1);
-    const expandedCentroids = centroids.expandDims(0);
+    // Helper function to calculate Euclidean distance
+    const distance = (a, b) => {
+      return Math.sqrt(a.reduce((sum, val, i) => sum + Math.pow(val - b[i], 2), 0));
+    };
     
-    const distances = tf.sum(tf.square(tf.sub(expandedPoints, expandedCentroids)), 2);
-    const assignments = tf.argMin(distances, 1);
+    // Run k-means iterations
+    const clusters = new Array(data.length);
+    
+    for (let iter = 0; iter < iterations; iter++) {
+      // Assign each point to nearest centroid
+      for (let i = 0; i < data.length; i++) {
+        let minDist = Infinity;
+        let clusterId = 0;
+        
+        for (let j = 0; j < centroids.length; j++) {
+          const dist = distance(data[i], centroids[j]);
+          if (dist < minDist) {
+            minDist = dist;
+            clusterId = j;
+          }
+        }
+        
+        clusters[i] = clusterId;
+      }
+      
+      // Update centroids
+      const newCentroids = Array.from({ length: numClusters }, () => 
+        Array.from({ length: dimensions }, () => 0)
+      );
+      
+      const counts = Array(numClusters).fill(0);
+      
+      for (let i = 0; i < data.length; i++) {
+        const clusterId = clusters[i];
+        counts[clusterId]++;
+        
+        for (let d = 0; d < dimensions; d++) {
+          newCentroids[clusterId][d] += data[i][d];
+        }
+      }
+      
+      for (let j = 0; j < numClusters; j++) {
+        if (counts[j] > 0) {
+          for (let d = 0; d < dimensions; d++) {
+            newCentroids[j][d] /= counts[j];
+          }
+        }
+      }
+      
+      centroids.splice(0, centroids.length, ...newCentroids);
+    }
     
     return {
-      clusters: Array.from(assignments.dataSync()),
-      centroids: Array.from(centroids.dataSync())
+      clusters,
+      centroids
     };
   }
   

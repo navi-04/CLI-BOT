@@ -1,36 +1,22 @@
 {
   "name": "cli-bot",
   "version": "1.0.0",
-  "description": "A customizable command line interface bot",
+  "description": "A minimal CLI bot without native dependencies",
   "main": "src/index.js",
   "bin": {
     "cli-bot": "./bin/cli-bot.js",
     "cli-bot-cmd": "./bin/cli-bot.cmd"
   },
   "scripts": {
-    "start": "node ./bin/cli-bot.js",
+    "start": "node ./src/minimal-cli.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [
     "cli",
     "bot",
     "command-line",
-    "automation",
-    "machine-learning"
+    "automation"
   ],
   "author": "",
-  "license": "MIT",
-  "dependencies": {
-    "chalk": "^4.1.2",
-    "commander": "^9.4.0",
-    "inquirer": "^8.2.4",
-    "@tensorflow/tfjs-node": "^3.18.0",
-    "brain.js": "^2.0.0-beta.15",
-    "csv-parser": "^3.0.0",
-    "fs-extra": "^10.1.0",
-    "natural": "^5.2.3",
-    "node-fetch": "^2.6.7",
-    "chart.js": "^3.8.0",
-    "chartjs-node-canvas": "^4.1.6"
-  }
+  "license": "MIT"
 }
