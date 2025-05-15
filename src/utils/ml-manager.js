@@ -117,7 +117,7 @@ class MLManager {
     });
     
     logger.info(`Training completed in ${result.iterations} iterations with error: ${result.error}`);
-    return network;
+    return network; 
   }
   
   async predict(model, input) {
